@@ -1,214 +1,93 @@
-{
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "parameters": {
-    "studentNumber": {
-      "type": "String",
-      "metadata": {
-        "description": "The student number to be used as a prefix for resource names"
-      }
-    },
-    "sqlAdminUsername": {
-      "type": "String",
-      "metadata": {
-        "description": "The SQL administrator user name (cannot be sa or admin)"
-      }
-    },
-    "sqlAdminPassword": {
-      "type": "SecureString",
-      "metadata": {
-        "description": "The SQL administrator password (keep this)"
-      }
-    },
-    "homeIpAddress": {
-      "type": "String",
-      "metadata": {
-        "description": "The IP address (besides Azure Resources & Avans Surfnet) you would like to allow to connect to the SQL database"
-      }
-    }
-  },
-  "variables": {
-    "region": "northeurope",
-    "appServiceName": "[concat('avansict', parameters('studentNumber'))]",
-    "appServicePlanName": "[concat('avansict', parameters('studentNumber'), 'plan')]",
-    "sqlDatabaseName": "[concat('db', parameters('studentNumber'))]",
-    "sqlServerName": "[concat('avansict', parameters('studentNumber'))]",
-    "linuxFxVersion": "DOTNETCORE|9.0",
-    "surfnetIpRangeStart": "145.48.0.0",
-    "surfnetIpRangeEnd": "145.49.255.255"
-  },
-  "resources": [
-    {
-      "type": "Microsoft.Web/serverfarms",
-      "apiVersion": "2018-11-01",
-      "name": "[variables('appServicePlanName')]",
-      "location": "[variables('region')]",
-      "kind": "linux",
-      "properties": {
-        "name": "[variables('appServicePlanName')]",
-        "workerSize": 0,
-        "workerSizeId": 0,
-        "numberOfWorkers": 1,
-        "zoneRedundant": false,
-        "reserved": true
-      },
-      "sku": {
-        "Tier": "Free",
-        "Name": "F1"
-      }
-    },
-    {
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2021-02-01",
-      "name": "[variables('appServiceName')]",
-      "location": "[variables('region')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"
-      ],
-      "properties": {
-        "name": "[variables('appServiceName')]",
-        "siteConfig": {
-          "appSettings": [
-            {
-              "name": "WEBSITE_WEBDEPLOY_USE_SCM",
-              "value": "true"
-            }
-          ],
-          "metadata": [
-            {
-              "name": "CURRENT_STACK",
-              "value": "dotnet"
-            }
-          ],
-          "linuxFxVersion": "[variables('linuxFxVersion')]",
-          "phpVersion": "OFF"
-        },
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"
-      }
-    },
-    {
-      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
-      "apiVersion": "2022-09-01",
-      "name": "[concat(variables('appServiceName'), '/scm')]",
-      "properties": {
-        "allow": true
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/Sites', variables('appServiceName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
-      "apiVersion": "2022-09-01",
-      "name": "[concat(variables('appServiceName'), '/ftp')]",
-      "properties": {
-        "allow": true
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/Sites', variables('appServiceName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Sql/servers",
-      "apiVersion": "2021-05-01-preview",
-      "name": "[variables('sqlServerName')]",
-      "location": "[variables('region')]",
-      "properties": {
-        "administratorLogin": "[parameters('sqlAdminUsername')]",
-        "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
-        "publicNetworkAccess": "Enabled",
-        "version": "12.0",
-        "minimalTlsVersion": "1.2"
-      },
-      "resources": [
-        {
-          "apiVersion": "2023-05-01-preview",
-          "dependsOn": [
-            "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
-          ],
-          "location": "[variables('region')]",
-          "tags": {},
-          "name": "[variables('sqlDatabaseName')]",
-          "properties": {
-            "collation": "SQL_Latin1_General_CP1_CI_AS",
-            "maxSizeBytes": 34359738368,
-            "sampleName": "",
-            "zoneRedundant": false,
-            "licenseType": "",
-            "readScale": "",
-            "highAvailabilityReplicaCount": 0,
-            "minCapacity": 0.5,
-            "autoPauseDelay": 60,
-            "requestedBackupStorageRedundancy": "Local",
-            "isLedgerOn": false,
-            "availabilityZone": "",
-            "useFreeLimit": true,
-            "freeLimitExhaustionBehavior": "AutoPause"
-          },
-          "sku": {
-            "name": "GP_S_Gen5_2",
-            "tier": "GeneralPurpose"
-          },
-          "type": "databases"
-        },
-        {
-          "apiVersion": "2021-11-01",
-          "dependsOn": [
-            "[concat('Microsoft.Sql/servers/', variables('sqlServerName'))]"
-          ],
-          "location": "[variables('region')]",
-          "name": "AllowAllWindowsAzureIps",
-          "properties": {
-            "endIpAddress": "0.0.0.0",
-            "startIpAddress": "0.0.0.0"
-          },
-          "type": "firewallrules"
-        },
-        {
-          "apiVersion": "2021-11-01",
-          "dependsOn": [
-            "[concat('Microsoft.Sql/servers/', variables('sqlServerName'))]"
-          ],
-          "location": "[variables('region')]",
-          "name": "Home IP address",
-          "properties": {
-            "endIpAddress": "[parameters('homeIpAddress')]",
-            "startIpAddress": "[parameters('homeIpAddress')]"
-          },
-          "type": "firewallrules"
-        },
-        {
-          "apiVersion": "2021-11-01",
-          "dependsOn": [
-            "[concat('Microsoft.Sql/servers/', variables('sqlServerName'))]"
-          ],
-          "location": "[variables('region')]",
-          "name": "Avans outbound IP addresses (Surfnet)",
-          "properties": {
-            "startIpAddress": "[variables('surfnetIpRangeStart')]",
-            "endIpAddress": "[variables('surfnetIpRangeEnd')]"
-          },
-          "type": "firewallrules"
-        }
-      ]
-    }
-  ],
-  "outputs": {
-    "azure_webapp_url": {
-      "type": "String",
-      "value": "[reference(resourceId('Microsoft.Web/sites', variables('appServiceName')), '2018-02-01').defaultHostName]"
-    },
-    "azure_webapp_name": {
-      "type": "String",
-      "value": "[variables('appServiceName')]"
-    },
-    "azure_webapp_publish_username": {
-      "type": "String",
-      "value": "[list(concat('Microsoft.Web/sites/', variables('appServiceName') ,'/config/publishingcredentials'), '2016-08-01').properties.publishingUserName]"
-    },
-    "azure_webapp_publish_password": {
-      "type": "String",
-      "value": "[list(concat('Microsoft.Web/sites/', variables('appServiceName') ,'/config/publishingcredentials'), '2016-08-01').properties.publishingPassword]"
-    }
-  }
-}
+name: Build, Test and Deploy a .NET Core WebApi to Azure App Service
+
+env: # Change these settings when you need to
+  ARTIFACT_NAME: WebApi
+  DOTNET_CORE_VERSION: 9.0.x
+  PUBLISH_DIRECTORY: "./out/publish"
+on:
+  push:
+    branches:
+      - main
+      - deployment 
+      - master
+
+  # Allows you to run this workflow manually from the Actions tab.
+  workflow_dispatch:
+
+jobs:
+  check: # checking if the secrets exist (src: https://stackoverflow.com/questions/72925899/github-actions-detect-if-secret-exists)
+      runs-on: ubuntu-latest
+      steps:
+        - name: "Check if AZURE_WEBAPP_NAME secret exists"
+          env: 
+            super_secret: ${{ secrets.AZURE_WEBAPP_NAME }}
+          if: ${{ env.super_secret == '' }}
+          run: 'echo "echo the secret \"AZURE_WEBAPP_NAME\" has not been made; echo please go to \"settings \> Actions secrets and variables \> actions\" to create it"; exit 1;'
+    
+        - name: "Check if AZURE_WEBAPP_PUBLISH_PASSWORD secret exists"
+          env: 
+            super_secret: ${{ secrets.AZURE_WEBAPP_PUBLISH_PASSWORD }}
+          if: ${{ env.super_secret == '' }}
+          run: 'echo "echo the secret \"AZURE_WEBAPP_PUBLISH_PASSWORD\" has not been made; echo please go to \"settings \> Actions secrets and variables \> actions \" to create it"; exit 1;'
+    
+        - name: "Check if AZURE_WEBAPP_PUBLISH_USERNAME secret exists"
+          env: 
+            super_secret: ${{ secrets.AZURE_WEBAPP_PUBLISH_USERNAME }}
+          if: ${{ env.super_secret == '' }}
+          run: 'echo "echo the secret \"AZURE_WEBAPP_PUBLISH_USERNAME\" has not been made; echo please go to \"settings \> Actions secrets and variables \> actions\" to create it"; exit 1;'
+    
+        - name: "Check if WEBAPI_PROJECT_NAME secret exists"
+          env: 
+            super_secret: ${{ secrets.WEBAPI_PROJECT_NAME }}
+          if: ${{ env.super_secret == '' }}
+          run: 'echo "echo the secret \"WEBAPI_PROJECT_NAME\" has not been made; echo please go to \"settings \> Actions secrets and variables \> actions\" to create it"; exit 1;'
+        
+  build:
+
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+    
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{env.DOTNET_CORE_VERSION}}
+
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build
+      run: dotnet build --no-restore
+    
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+    
+    - name: Publish
+      run: dotnet publish ./${{ secrets.WEBAPI_PROJECT_NAME }} --output ${{env.PUBLISH_DIRECTORY}} --configuration Release 
+    
+    - name: Publish Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}
+        path: ${{ env.PUBLISH_DIRECTORY}}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [check, build]
+    steps:
+
+    - name: Download artifact from build job
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}
+        path: ${{ env.PUBLISH_DIRECTORY}}
+
+     # Deploy to Azure Web apps
+    - name: 'Deploy to Azure App Service'
+      uses: azure/webapps-deploy@v3
+      with: 
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        publish-profile: <publishData><publishProfile profileName="${{secrets.AZURE_WEBAPP_NAME}} - Zip Deploy" publishMethod="ZipDeploy" publishUrl="${{ secrets.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net:443" userName="${{ secrets.AZURE_WEBAPP_PUBLISH_USERNAME }}" userPWD="${{ secrets.AZURE_WEBAPP_PUBLISH_PASSWORD }}" destinationAppUrl="http://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net" SQLServerDBConnectionString="" mySQLDBConnectionString="" hostingProviderForumLink="" controlPanelLink="https://portal.azure.com" webSystem="WebSites"><databases /></publishProfile></publishData>
+        package: '${{ env.PUBLISH_DIRECTORY}}'
+        clean: true
